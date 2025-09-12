@@ -8,6 +8,7 @@ pipeline {
         BROKERS         = "172.31.22.11:9092,172.31.16.250:9092,172.31.18.231:9092"
         TEST_TOPIC      = "ci-cd-test-topic"
         NODES           = "172.31.22.11 172.31.16.250 172.31.18.231"
+        SSH_USER        = "ubuntu"   // change if your EC2 uses a different user
     }
 
     stages {
@@ -20,7 +21,7 @@ pipeline {
 
         stage('Ping Connectivity Check') {
             steps {
-                echo "Checking connectivity to Kafka/ZooKeeper nodes..."
+                echo "Pinging all Kafka/ZooKeeper nodes..."
                 sh """
                     set -e
                     for node in ${NODES}; do
@@ -28,6 +29,21 @@ pipeline {
                         ping -c 2 \$node || { echo "Node \$node is unreachable"; exit 1; }
                     done
                 """
+            }
+        }
+
+        stage('SSH Connectivity Check') {
+            steps {
+                echo "Checking SSH connectivity to all nodes..."
+                sshagent(['my-kafka-ssh-key']) {
+                    sh """
+                        set -e
+                        for node in ${NODES}; do
+                            echo "Testing SSH to \$node..."
+                            ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=5 ${SSH_USER}@\$node "echo SSH OK on \$node"
+                        done
+                    """
+                }
             }
         }
 
@@ -88,10 +104,10 @@ pipeline {
 
     post {
         success {
-            echo "Kafka + Zookeeper cluster deployment and validation successful"
+            echo "Kafka + Zookeeper cluster deployment and validation successful ✅"
         }
         failure {
-            echo "Deployment failed. Check logs"
+            echo "❌ Deployment failed. Check logs."
         }
     }
 }
