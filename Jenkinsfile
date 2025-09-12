@@ -20,7 +20,9 @@ pipeline {
         stage('Deploy Cluster with Ansible') {
             steps {
                 echo "Running Ansible playbook to deploy Zookeeper + Kafka..."
-                sh "ansible-playbook -i ${INVENTORY} ${ANSIBLE_PLAYBOOK}"
+                sshagent(['my-kafka-ssh-key']) {
+                    sh "ansible-playbook -i ${INVENTORY} ${ANSIBLE_PLAYBOOK}"
+                }
             }
         }
 
@@ -28,6 +30,7 @@ pipeline {
             steps {
                 echo "Creating test topic..."
                 sh """
+                    set -e
                     ${KAFKA_BIN}/kafka-topics.sh --bootstrap-server ${BROKERS} \
                     --create --topic ${TEST_TOPIC} --partitions 3 --replication-factor 3 || echo 'Topic already exists'
                 """
@@ -38,6 +41,7 @@ pipeline {
             steps {
                 echo "Producing test message..."
                 sh """
+                    set -e
                     echo 'Hello from CI/CD pipeline!' | \
                     ${KAFKA_BIN}/kafka-console-producer.sh --broker-list ${BROKERS} --topic ${TEST_TOPIC}
                 """
@@ -48,6 +52,7 @@ pipeline {
             steps {
                 echo "Consuming test message..."
                 sh """
+                    set -e
                     ${KAFKA_BIN}/kafka-console-consumer.sh --bootstrap-server ${BROKERS} \
                     --topic ${TEST_TOPIC} --from-beginning --timeout-ms 5000
                 """
@@ -58,8 +63,9 @@ pipeline {
             steps {
                 echo "Checking broker connectivity..."
                 sh """
+                    set -e
                     for broker in 172.31.22.11 172.31.16.250 172.31.18.231; do
-                        ${KAFKA_BIN}/kafka-broker-api-versions.sh --bootstrap-server $broker:9092
+                        ${KAFKA_BIN}/kafka-broker-api-versions.sh --bootstrap-server \$broker:9092
                     done
                 """
             }
@@ -68,10 +74,10 @@ pipeline {
 
     post {
         success {
-            echo " Kafka + Zookeeper cluster deployment and validation successful"
+            echo "Kafka + Zookeeper cluster deployment and validation successful"
         }
         failure {
-            echo " Deployment failed. Check logs"
+            echo "Deployment failed. Check logs"
         }
     }
 }
