@@ -7,6 +7,7 @@ pipeline {
         KAFKA_BIN       = "/opt/kafka/kafka_2.13-3.7.0/bin"
         BROKERS         = "172.31.22.11:9092,172.31.16.250:9092,172.31.18.231:9092"
         TEST_TOPIC      = "ci-cd-test-topic"
+        NODES           = "172.31.22.11 172.31.16.250 172.31.18.231"
     }
 
     stages {
@@ -14,6 +15,19 @@ pipeline {
             steps {
                 echo "Checking out repository..."
                 git branch: 'main', url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
+            }
+        }
+
+        stage('Ping Connectivity Check') {
+            steps {
+                echo "Checking connectivity to Kafka/ZooKeeper nodes..."
+                sh """
+                    set -e
+                    for node in ${NODES}; do
+                        echo "Pinging \$node..."
+                        ping -c 2 \$node || { echo "Node \$node is unreachable"; exit 1; }
+                    done
+                """
             }
         }
 
@@ -64,7 +78,7 @@ pipeline {
                 echo "Checking broker connectivity..."
                 sh """
                     set -e
-                    for broker in 172.31.22.11 172.31.16.250 172.31.18.231; do
+                    for broker in ${NODES}; do
                         ${KAFKA_BIN}/kafka-broker-api-versions.sh --bootstrap-server \$broker:9092
                     done
                 """
