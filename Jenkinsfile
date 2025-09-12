@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+
+    environment {
+        ANSIBLE_PLAYBOOK = "kafka-zookeeper-cluster/cluster-playbook.yml"
+        INVENTORY       = "kafka-zookeeper-cluster/inventory.ini"
+        KAFKA_BIN       = "/opt/kafka/kafka_2.13-3.7.0/bin"
+        BROKERS         = "172.31.22.11:9092,172.31.16.250:9092,172.31.18.231:9092"
+        TEST_TOPIC      = "ci-cd-test-topic"
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                echo "Checking out repository..."
+                git branch: 'main', url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
+            }
+        }
+
+        stage('Deploy Cluster with Ansible') {
+            steps {
+                echo "Running Ansible playbook to deploy Zookeeper + Kafka..."
+                sh "ansible-playbook -i ${INVENTORY} ${ANSIBLE_PLAYBOOK}"
+            }
+        }
+
+        stage('Create Test Topic') {
+            steps {
+                echo "Creating test topic..."
+                sh """
+                    ${KAFKA_BIN}/kafka-topics.sh --bootstrap-server ${BROKERS} \
+                    --create --topic ${TEST_TOPIC} --partitions 3 --replication-factor 3 || echo 'Topic already exists'
+                """
+            }
+        }
+
+        stage('Produce Test Message') {
+            steps {
+                echo "Producing test message..."
+                sh """
+                    echo 'Hello from CI/CD pipeline!' | \
+                    ${KAFKA_BIN}/kafka-console-producer.sh --broker-list ${BROKERS} --topic ${TEST_TOPIC}
+                """
+            }
+        }
+
+        stage('Consume Test Message') {
+            steps {
+                echo "Consuming test message..."
+                sh """
+                    ${KAFKA_BIN}/kafka-console-consumer.sh --bootstrap-server ${BROKERS} \
+                    --topic ${TEST_TOPIC} --from-beginning --timeout-ms 5000
+                """
+            }
+        }
+
+        stage('Cluster Health Check') {
+            steps {
+                echo "Checking broker connectivity..."
+                sh """
+                    for broker in 172.31.22.11 172.31.16.250 172.31.18.231; do
+                        ${KAFKA_BIN}/kafka-broker-api-versions.sh --bootstrap-server $broker:9092
+                    done
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo " Kafka + Zookeeper cluster deployment and validation successful"
+        }
+        failure {
+            echo " Deployment failed. Check logs"
+        }
+    }
+}
