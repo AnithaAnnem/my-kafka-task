@@ -1,0 +1,77 @@
+- name: Ensure Kafka install directory exists
+  file:
+    path: "{{ kafka_install_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Ensure Kafka data directory exists
+  file:
+    path: "{{ kafka_data_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: yes
+
+
+- name: Ensure Kafka logs directory exists
+  file:
+    path: "{{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/logs"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  become: yes
+
+
+
+- name: Install Java (required for Kafka)
+  apt:
+    name: openjdk-11-jdk
+    state: present
+  become: yes
+
+- name: Download Kafka tarball
+  get_url:
+    url: "{{ kafka_download_url }}"
+    dest: "/tmp/kafka_2.13-{{ kafka_version }}.tgz"
+    mode: '0644'
+
+- name: Extract Kafka
+  unarchive:
+    src: "/tmp/kafka_2.13-{{ kafka_version }}.tgz"
+    dest: "{{ kafka_install_dir }}"
+    remote_src: yes
+    creates: "{{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}"
+  become: yes
+
+- name: Copy Kafka broker configuration
+  template:
+    src: "server.properties.j2"
+    dest: "{{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/config/server.properties"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  become: yes
+
+- name: Copy Kafka systemd service
+  template:
+    src: "kafka.service.j2"
+    dest: /etc/systemd/system/kafka.service
+    mode: '0644'
+  become: yes
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: Enable and start Kafka service
+  systemd:
+    name: kafka
+    state: started
+    enabled: yes
+  become: yes

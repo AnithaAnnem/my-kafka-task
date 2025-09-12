@@ -1,0 +1,12 @@
+---
+- name: Setup 3-node Zookeeper cluster
+  hosts: zookeeper
+  become: yes
+  roles:
+    - zookeeper
+
+- name: Setup 3-node Kafka cluster
+  hosts: kafka
+  become: yes
+  roles:
+    - kafka

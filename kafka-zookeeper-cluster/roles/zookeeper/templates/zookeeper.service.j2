@@ -1,0 +1,15 @@
+[Unit]
+Description=Apache ZooKeeper Service
+After=network.target
+
+[Service]
+Type=forking
+User={{ ansible_user }}
+Environment="ZOO_LOG_DIR={{ zookeeper_log_dir }}"
+ExecStart={{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin/bin/zkServer.sh start
+ExecStop={{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin/bin/zkServer.sh stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

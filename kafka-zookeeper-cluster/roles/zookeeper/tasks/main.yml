@@ -1,0 +1,100 @@
+- name: Ensure Zookeeper data directory exists
+  file:
+    path: "{{ zookeeper_data_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Ensure Zookeeper log directory exists
+  file:
+    path: "{{ zookeeper_log_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Install Java (required for Zookeeper)
+  apt:
+    name: openjdk-11-jdk
+    state: present
+  become: yes
+
+- name: Download Zookeeper tarball
+  get_url:
+    url: "{{ zookeeper_url }}"
+    dest: "/tmp/apache-zookeeper-{{ zookeeper_version }}-bin.tar.gz"
+    mode: '0644'
+
+- name: Ensure Zookeeper install directory exists
+  file:
+    path: "{{ zookeeper_install_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Extract Zookeeper
+  unarchive:
+    src: "/tmp/apache-zookeeper-{{ zookeeper_version }}-bin.tar.gz"
+    dest: "{{ zookeeper_install_dir }}"
+    remote_src: yes
+    creates: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin"
+  become: yes
+
+- name: Create Zookeeper config directory
+  file:
+    path: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin/conf"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Copy zoo.cfg (cluster configuration)
+  template:
+    src: zookeeper.properties.j2
+    dest: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin/conf/zoo.cfg"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  become: yes
+
+- name: Set myid file for this node
+  copy:
+    dest: "{{ zookeeper_data_dir }}/myid"
+    content: "{{ item.id }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  loop: "{{ zookeeper_cluster_nodes }}"
+  when: ansible_host == item.ip
+  become: yes
+
+- name: Set executable permission for zkServer.sh
+  file:
+    path: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin/bin/zkServer.sh"
+    mode: '0755'
+  become: yes
+
+- name: Copy systemd service file
+  template:
+    src: zookeeper.service.j2
+    dest: /etc/systemd/system/zookeeper.service
+    mode: '0644'
+  become: yes
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: Enable and start Zookeeper service
+  systemd:
+    name: zookeeper
+    state: started
+    enabled: yes
+  become: yes

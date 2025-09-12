@@ -1,0 +1,6 @@
+kafka_version: "3.7.0"
+kafka_install_dir: "/opt/kafka"
+kafka_data_dir: "/var/lib/kafka"
+kafka_port: 9092
+zookeeper_connect: "172.31.22.11:2181,172.31.16.250:2181,172.31.18.231:2181"
+kafka_download_url: "https://archive.apache.org/dist/kafka/3.7.0/kafka_2.13-3.7.0.tgz"
