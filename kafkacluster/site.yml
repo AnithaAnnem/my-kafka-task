@@ -1,0 +1,9 @@
+- hosts: zk_1,zk_2,zk_3
+  become: yes
+  roles:
+    - zookeeper
+
+- hosts: kafka_n1,kafka_n2,kafka_n3
+  become: yes
+  roles:
+    - kafka

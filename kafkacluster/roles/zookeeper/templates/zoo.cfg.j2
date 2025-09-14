@@ -1,0 +1,10 @@
+tickTime=2000
+dataDir={{ zookeeper_data_dir }}/data
+dataLogDir={{ zookeeper_data_dir }}/log
+clientPort=2181
+initLimit=5
+syncLimit=2
+
+{% for host in zookeeper_hosts %}
+server.{{ host.id }}={{ host.ip }}:2888:3888
+{% endfor %}

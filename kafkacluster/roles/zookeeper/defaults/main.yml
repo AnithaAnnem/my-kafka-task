@@ -1,0 +1,7 @@
+zookeeper_version: 3.9.2
+zookeeper_install_dir: /opt/zookeeper
+zookeeper_data_dir: /var/lib/zookeeper   # changed from /tmp/zookeeper
+
+# User and group for running Zookeeper
+zookeeper_user: zookeeper
+zookeeper_group: zookeeper

@@ -1,0 +1,24 @@
+# Broker ID
+broker.id={{ broker_id }}
+
+# Kafka log directory
+log.dirs={{ kafka_data_dir }}/logs
+
+# Zookeeper connect string
+zookeeper.connect={% for zk in zookeeper_hosts %}{{ zk.ip }}:2181{% if not loop.last %},{% endif %}{% endfor %}
+
+# Listeners
+listeners=PLAINTEXT://0.0.0.0:9092
+advertised.listeners=PLAINTEXT://{{ kafka_hosts | selectattr('name', 'equalto', inventory_hostname) | map(attribute='ip') | list | first }}:9092
+
+# Threads and network
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+
+# Log retention and size
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000

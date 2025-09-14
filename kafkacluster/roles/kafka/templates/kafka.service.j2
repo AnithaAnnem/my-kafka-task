@@ -1,0 +1,25 @@
+[Unit]
+Description=Apache Kafka Service
+After=network.target
+
+[Service]
+Type=simple
+User={{ kafka_user }}
+Group={{ kafka_group }}
+Environment="JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64"
+Environment="PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="KAFKA_LOG_DIR={{ kafka_data_dir }}/logs"
+
+# Ensure necessary directories exist and are owned by kafka user
+ExecStartPre=/bin/mkdir -p {{ kafka_data_dir }}/logs {{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/logs /tmp/kafka
+ExecStartPre=/bin/chown -R {{ kafka_user }}:{{ kafka_group }} {{ kafka_data_dir }} {{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/logs /tmp/kafka
+
+ExecStart={{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/bin/kafka-server-start.sh {{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/config/server.properties
+ExecStop={{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/bin/kafka-server-stop.sh
+
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=100000
+
+[Install]
+WantedBy=multi-user.target
