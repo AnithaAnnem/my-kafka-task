@@ -2,52 +2,60 @@ pipeline {
     agent any
 
     environment {
-        SSH_USER = 'ubuntu'
-        SSH_KEY = 'AWS-SSH-key'
-        PLAYBOOK = 'kafkacluster/site.yml'
+        ANSIBLE_KEY = '/var/lib/jenkins/.ssh/MYKAFKA.pem'
+        ANSIBLE_USER = 'ubuntu'
         INVENTORY = 'kafkacluster/aws_ec2.yml'
+        PLAYBOOK = 'kafkacluster/site.yml'
     }
 
     stages {
 
         stage('Checkout SCM') {
             steps {
-                checkout scm
+                echo "Checking out Git repository..."
+                checkout([$class: 'GitSCM', 
+                          branches: [[name: '*/main']], 
+                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]
+                ])
             }
         }
 
         stage('Run Ansible Playbook') {
             steps {
-                echo 'Running Ansible playbook to deploy Kafka cluster...'
-                sh """
-                    ansible-playbook -i ${INVENTORY} ${PLAYBOOK} -u ${SSH_USER} --private-key ${SSH_KEY}
-                """
+                echo "Running Ansible playbook to deploy Kafka cluster..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY
+                '''
             }
         }
 
         stage('Verify Services') {
             steps {
-                echo 'Verifying Kafka and Zookeeper services...'
+                echo "Verifying Zookeeper and Kafka services..."
+                // Example: ping each host or check systemctl status
                 sh '''
-                    for host in $(ansible -i ${INVENTORY} all --list-hosts | tail -n +2); do
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${SSH_USER}@${host} \
-                        "systemctl status kafka && systemctl status zookeeper"
-                    done
+                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.120 "systemctl status zookeeper"
+                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.68 "systemctl status zookeeper"
+                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.179 "systemctl status zookeeper"
+                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.120 "systemctl status kafka"
+                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.68 "systemctl status kafka"
+                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.179 "systemctl status kafka"
                 '''
             }
         }
     }
 
     post {
-        always {
-            echo 'Cleaning workspace...'
-            cleanWs()
-        }
         success {
-            echo 'Kafka cluster deployed successfully!'
+            echo "Kafka cluster deployed successfully!"
         }
         failure {
-            echo 'Deployment failed. Please check the logs.'
+            echo "Deployment failed. Please check the logs."
+        }
+        always {
+            echo "Cleaning workspace..."
+            cleanWs()
         }
     }
 }
