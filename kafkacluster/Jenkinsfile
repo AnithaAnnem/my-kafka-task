@@ -2,14 +2,16 @@ pipeline {
     agent any
 
     environment {
-        AWS_ACCESS_KEY_ID = credentials('aws_access_key_id')       // Jenkins credential ID
-        AWS_SECRET_ACCESS_KEY = credentials('aws_secret_access_key')
-        AWS_REGION = 'us-east-1'                                   // your region
+        AWS_REGION = 'us-east-1'
+        AWS_ACCESS_KEY_ID = credentials('aws-creds')   // your Jenkins credential ID
+        AWS_SECRET_ACCESS_KEY = credentials('aws-creds') // same ID if username/password type
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
+                echo "Checking out code from Git..."
                 git branch: 'main', url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
             }
         }
@@ -27,7 +29,8 @@ pipeline {
             steps {
                 sh '''
                     echo "Verifying Zookeeper quorum..."
-                    ansible all -i kafkacluster/aws_ec2.yml -m shell -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" -u ubuntu
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" -u ubuntu
                 '''
             }
         }
@@ -45,25 +48,41 @@ pipeline {
             steps {
                 sh '''
                     echo "Verifying Kafka brokers..."
-                    ansible all -i kafkacluster/aws_ec2.yml -m shell -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
                 '''
             }
         }
 
-        stage('Create Test Topic') {
+        stage('Create Test Kafka Topic') {
             steps {
                 sh '''
                     echo "Creating test Kafka topic..."
-                    ansible all -i kafkacluster/aws_ec2.yml -m shell -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
                 '''
             }
         }
 
         stage('Clean Workspace') {
             steps {
-                echo "Cleaning up workspace..."
+                echo "Cleaning workspace..."
                 cleanWs()
             }
         }
+
     }
+
+    post {
+        success {
+            echo "Kafka & Zookeeper deployment completed successfully."
+        }
+        failure {
+            echo "Deployment failed. Check the logs!"
+        }
+        always {
+            echo "Pipeline finished."
+        }
+    }
+
 }
