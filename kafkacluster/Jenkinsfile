@@ -2,71 +2,54 @@ pipeline {
     agent any
 
     environment {
-        // AWS credentials stored in Jenkins (replace 'aws-creds' with your Jenkins credential ID)
-        AWS_ACCESS_KEY_ID     = credentials('aws-creds')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-creds')
-        AWS_DEFAULT_REGION    = 'us-east-1'
+        // Inject AWS credentials into environment
+        AWS_ACCESS_KEY_ID     = credentials('AWS-creds') // AWS access key from Jenkins credentials
+        AWS_SECRET_ACCESS_KEY = credentials('AWS-creds')
+        AWS_DEFAULT_REGION    = 'us-east-1' // Change if your region is different
+        JAVA_HOME             = '/usr/lib/jvm/java-11-openjdk-amd64' // Ensure Java is already installed
+        PATH                  = "${env.JAVA_HOME}/bin:${env.PATH}"
     }
 
     stages {
 
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main',
-                    url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
-            }
-        }
-
         stage('Deploy Zookeeper Cluster') {
             steps {
-                echo 'Deploying Zookeeper Cluster...'
-                sh 'ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper'
+                echo "Deploying Zookeeper Cluster..."
+                sh "ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper"
             }
         }
 
         stage('Verify Zookeeper Quorum') {
             steps {
-                echo 'Verifying Zookeeper quorum...'
-                sh '''
-                    ansible all -i kafkacluster/aws_ec2.yml \
-                    -m shell \
-                    -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" -u ubuntu
-                '''
+                echo "Verifying Zookeeper quorum..."
+                sh "ansible all -i kafkacluster/aws_ec2.yml -m shell -a '/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status' -u ubuntu"
             }
         }
 
         stage('Deploy Kafka Brokers') {
             steps {
-                echo 'Deploying Kafka Brokers...'
-                sh 'ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka'
+                echo "Deploying Kafka Brokers..."
+                sh "ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka"
             }
         }
 
         stage('Verify Kafka Cluster') {
             steps {
-                echo 'Verifying Kafka brokers...'
-                sh '''
-                    ansible all -i kafkacluster/aws_ec2.yml \
-                    -m shell \
-                    -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
-                '''
+                echo "Verifying Kafka brokers..."
+                sh "ansible all -i kafkacluster/aws_ec2.yml -m shell -a '/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092' -u ubuntu"
             }
         }
 
         stage('Create Test Kafka Topic') {
             steps {
-                echo 'Creating test Kafka topic...'
-                sh '''
-                    ansible all -i kafkacluster/aws_ec2.yml \
-                    -m shell \
-                    -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
-                '''
+                echo "Creating test Kafka topic..."
+                sh "ansible all -i kafkacluster/aws_ec2.yml -m shell -a '/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092' -u ubuntu"
             }
         }
 
         stage('Clean Workspace') {
             steps {
-                echo 'Cleaning workspace...'
+                echo "Cleaning workspace..."
                 cleanWs()
             }
         }
@@ -74,7 +57,7 @@ pipeline {
 
     post {
         always {
-            echo 'Kafka & Zookeeper deployment pipeline finished.'
+            echo "Kafka & Zookeeper deployment completed successfully."
         }
     }
 }
