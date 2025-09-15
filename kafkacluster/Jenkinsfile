@@ -14,14 +14,7 @@ pipeline {
             steps {
                 echo "Checking out Kafka cluster repository..."
                 checkout([$class: 'GitSCM', branches: [[name: '*/main']], 
-                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]])
-            }
-        }
-
-        stage('Install Ansible Requirements') {
-            steps {
-                echo "Installing requirements if needed..."
-                sh 'ansible --version || sudo apt-get update && sudo apt-get install -y ansible python3-pip'
+                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]] )
             }
         }
 
