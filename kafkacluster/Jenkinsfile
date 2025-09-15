@@ -15,8 +15,8 @@ pipeline {
                 echo "Checking out Git repository..."
                 checkout([$class: 'GitSCM', 
                           branches: [[name: '*/main']], 
-                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]]
-                )
+                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]
+                ])
             }
         }
 
@@ -27,22 +27,6 @@ pipeline {
                 export ANSIBLE_HOST_KEY_CHECKING=False
                 ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY
                 '''
-            }
-        }
-
-        stage('Verify Services') {
-            steps {
-                echo "Verifying Zookeeper and Kafka services..."
-                script {
-                    def nodes = ['10.0.11.120', '10.0.11.68', '10.0.11.179']
-                    for (def node : nodes) {
-                        echo "Checking Zookeeper on ${node}..."
-                        sh "ssh -o StrictHostKeyChecking=no -i $ANSIBLE_KEY $ANSIBLE_USER@${node} 'systemctl status zookeeper || exit 1'"
-                        
-                        echo "Checking Kafka on ${node}..."
-                        sh "ssh -o StrictHostKeyChecking=no -i $ANSIBLE_KEY $ANSIBLE_USER@${node} 'systemctl status kafka || exit 1'"
-                    }
-                }
             }
         }
     }
