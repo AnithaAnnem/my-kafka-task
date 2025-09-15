@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         AWS_REGION = 'us-east-1'
-        KAFKA_BIN = '/opt/kafka/bin'  // Adjust if Kafka is installed elsewhere
     }
 
     stages {
@@ -11,7 +10,6 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo "Checking out Kafka cluster code..."
-                // Public repo → no credentials needed
                 git branch: 'main',
                     url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
             }
@@ -20,60 +18,42 @@ pipeline {
         stage('Test SSH Connectivity') {
             steps {
                 echo "Testing SSH connectivity to all EC2 instances..."
-                sh """
-                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m ping -vvv
-                """
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'AWS-creds'
+                ]]) {
+                    sh """
+                        ansible all -i kafkacluster/aws_ec2.yml -u ubuntu -m ping -vvv
+                    """
+                }
             }
         }
 
         stage('Deploy Zookeeper Cluster') {
             steps {
                 echo "Deploying Zookeeper Cluster..."
-                sh """
-                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper -vvv
-                """
-            }
-        }
-
-        stage('Verify Zookeeper Quorum') {
-            steps {
-                echo "Verifying Zookeeper Quorum..."
-                sh """
-                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a 'echo stat | nc localhost 2181 || echo "Zookeeper not reachable"'
-                """
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'AWS-creds'
+                ]]) {
+                    sh """
+                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper
+                    """
+                }
             }
         }
 
         stage('Deploy Kafka Brokers') {
             steps {
                 echo "Deploying Kafka Brokers..."
-                sh """
-                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka -vvv
-                """
-            }
-        }
-
-        stage('Verify Kafka Cluster') {
-            steps {
-                echo "Verifying Kafka Cluster..."
-                sh """
-                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a '${KAFKA_BIN}/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || echo "Kafka broker not reachable"'
-                """
-            }
-        }
-
-        stage('Create Test Kafka Topic') {
-            steps {
-                echo "Creating test Kafka topic if not exists..."
-                sh """
-                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a '
-                        if ! ${KAFKA_BIN}/kafka-topics.sh --list --bootstrap-server localhost:9092 | grep -q "^test-topic\$"; then
-                            ${KAFKA_BIN}/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 3 --replication-factor 3
-                        else
-                            echo "Topic test-topic already exists"
-                        fi
-                    '
-                """
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'AWS-creds'
+                ]]) {
+                    sh """
+                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka
+                    """
+                }
             }
         }
 
@@ -86,14 +66,8 @@ pipeline {
     }
 
     post {
-        success {
-            echo "Deployment completed successfully!"
-        }
-        failure {
-            echo "Deployment failed. Check logs for errors."
-        }
-        always {
-            echo "Pipeline finished."
-        }
+        success { echo "Deployment completed successfully!" }
+        failure { echo "Deployment failed. Check logs for errors." }
+        always { echo "Pipeline finished." }
     }
 }
