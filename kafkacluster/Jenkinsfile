@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'  // change if needed
+        AWS_REGION = 'us-east-1'
     }
 
     stages {
@@ -11,91 +11,62 @@ pipeline {
             steps {
                 echo "Checking out Kafka cluster code..."
                 git branch: 'main',
-                    url: 'https://github.com/AnithaAn/kafkacluster.git'
+                    url: 'git@github.com:AnithaAn/kafkacluster.git',
+                    credentialsId: 'ubuntu'
             }
         }
 
         stage('Test SSH Connectivity') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ubuntu',  // your SSH credential
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    echo "Testing SSH connectivity to all EC2 instances..."
-                    sh '''
-                        ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key $SSH_KEY -m ping
-                    '''
-                }
+                echo "Testing SSH connectivity to all EC2 instances..."
+                sh """
+                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key ~/.ssh/id_rsa -m ping
+                """
             }
         }
 
         stage('Deploy Zookeeper Cluster') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ubuntu',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    echo "Deploying Zookeeper Cluster..."
-                    sh '''
-                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper -u ubuntu --private-key $SSH_KEY
-                    '''
-                }
+                echo "Deploying Zookeeper Cluster..."
+                sh """
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper -u ubuntu --private-key ~/.ssh/id_rsa
+                """
             }
         }
 
         stage('Verify Zookeeper Quorum') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ubuntu',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    echo "Verifying Zookeeper quorum..."
-                    sh '''
-                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags verify_zookeeper -u ubuntu --private-key $SSH_KEY
-                    '''
-                }
+                echo "Verifying Zookeeper Quorum..."
+                sh """
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags verify_zookeeper -u ubuntu --private-key ~/.ssh/id_rsa
+                """
             }
         }
 
         stage('Deploy Kafka Brokers') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ubuntu',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    echo "Deploying Kafka Brokers..."
-                    sh '''
-                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka -u ubuntu --private-key $SSH_KEY
-                    '''
-                }
+                echo "Deploying Kafka Brokers..."
+                sh """
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka -u ubuntu --private-key ~/.ssh/id_rsa
+                """
             }
         }
 
         stage('Verify Kafka Cluster') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ubuntu',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    echo "Verifying Kafka Cluster..."
-                    sh '''
-                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags verify_kafka -u ubuntu --private-key $SSH_KEY
-                    '''
-                }
+                echo "Verifying Kafka Cluster..."
+                sh """
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags verify_kafka -u ubuntu --private-key ~/.ssh/id_rsa
+                """
             }
         }
 
         stage('Create Test Kafka Topic') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ubuntu',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    echo "Creating test Kafka topic..."
-                    sh '''
-                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags create_topic -u ubuntu --private-key $SSH_KEY
-                    '''
-                }
+                echo "Creating Test Kafka Topic..."
+                sh """
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags create_topic -u ubuntu --private-key ~/.ssh/id_rsa
+                """
             }
         }
 
@@ -113,6 +84,9 @@ pipeline {
         }
         failure {
             echo "Deployment failed. Check logs for errors."
+        }
+        always {
+            echo "Pipeline finished."
         }
     }
 }
