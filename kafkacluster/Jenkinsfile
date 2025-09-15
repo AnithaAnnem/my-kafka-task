@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         AWS_REGION = 'us-east-1'
-        KAFKA_BIN = '/opt/kafka/bin'  // Adjust this path if Kafka is installed elsewhere
+        KAFKA_BIN = '/opt/kafka/bin'  // Adjust if Kafka is installed elsewhere
     }
 
     stages {
@@ -11,9 +11,9 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo "Checking out Kafka cluster code..."
+                // Public repo → no credentials needed
                 git branch: 'main',
-                    url: 'git@github.com:AnithaAn/kafkacluster.git',
-                    credentialsId: 'ubuntu'
+                    url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
             }
         }
 
