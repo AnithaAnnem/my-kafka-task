@@ -15,33 +15,31 @@ pipeline {
                 echo "Checking out Git repository..."
                 checkout([$class: 'GitSCM', 
                           branches: [[name: '*/main']], 
-                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]
-                ])
+                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]]
+                )
             }
         }
 
         stage('Run Ansible Playbook') {
             steps {
                 echo "Running Ansible playbook to deploy Kafka cluster..."
-                sh '''
-                export ANSIBLE_HOST_KEY_CHECKING=False
+                sh """
                 ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY
-                '''
+                """
             }
         }
 
         stage('Verify Services') {
             steps {
-                echo "Verifying Zookeeper and Kafka services..."
-                // Example: ping each host or check systemctl status
-                sh '''
-                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.120 "systemctl status zookeeper"
-                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.68 "systemctl status zookeeper"
-                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.179 "systemctl status zookeeper"
-                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.120 "systemctl status kafka"
-                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.68 "systemctl status kafka"
-                ssh -i $ANSIBLE_KEY $ANSIBLE_USER@10.0.11.179 "systemctl status kafka"
-                '''
+                echo "Verifying Zookeeper and Kafka services on all nodes..."
+                sh """
+                for host in 10.0.11.120 10.0.11.68 10.0.11.179; do
+                    echo "=== $host ==="
+                    ssh -i $ANSIBLE_KEY $ANSIBLE_USER@\$host "systemctl status zookeeper"
+                    ssh -i $ANSIBLE_KEY $ANSIBLE_USER@\$host "systemctl status kafka"
+                    echo ""
+                done
+                """
             }
         }
     }
