@@ -1,0 +1,76 @@
+pipeline {
+    agent any
+
+    environment {
+        DYNAMIC_INVENTORY = 'aws_ec2.yml'
+    }
+
+    options {
+        skipDefaultCheckout true
+        timestamps()
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
+            }
+        }
+
+        stage('Prepare Environment') {
+            steps {
+                echo "Installing Java and required packages on all nodes"
+                sh """
+                ansible all -i $DYNAMIC_INVENTORY -m apt -a "name=default-jdk state=present update_cache=yes" -u ubuntu
+                """
+            }
+        }
+
+        stage('Deploy Zookeeper Cluster') {
+            steps {
+                echo "Running Zookeeper role via Ansible"
+                sh """
+                ansible-playbook -i $DYNAMIC_INVENTORY site.yml --tags zookeeper
+                """
+            }
+        }
+
+        stage('Verify Zookeeper Quorum') {
+            steps {
+                echo "Checking Zookeeper nodes"
+                sh """
+                ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" -u ubuntu
+                """
+            }
+        }
+
+        stage('Deploy Kafka Brokers') {
+            steps {
+                echo "Running Kafka role via Ansible"
+                sh """
+                ansible-playbook -i $DYNAMIC_INVENTORY site.yml --tags kafka
+                """
+            }
+        }
+
+        stage('Verify Kafka Cluster') {
+            steps {
+                echo "Checking Kafka brokers"
+                sh """
+                ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/kafka/kafka_2.13-{{ kafka_version }}/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
+                """
+            }
+        }
+
+        stage('Optional: Create Test Topic') {
+            steps {
+                echo "Creating test topic"
+                sh """
+                ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/kafka/kafka_2.13-{{ kafka_version }}/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
+                """
+            }
+        }
+
+    }
+}
