@@ -2,15 +2,15 @@ pipeline {
     agent any
 
     environment {
-        ANSIBLE_KEY = '/var/lib/jenkins/.ssh/MYKAFKA.pem'
-        ANSIBLE_USER = 'ubuntu'
-        INVENTORY = 'kafkacluster/aws_ec2.yml'
-        PLAYBOOK = 'kafkacluster/site.yml'
+        ANSIBLE_KEY   = '/var/lib/jenkins/.ssh/MYKAFKA.pem'
+        ANSIBLE_USER  = 'ubuntu'
+        INVENTORY     = 'kafkacluster/aws_ec2.yml'
+        PLAYBOOK      = 'kafkacluster/site.yml'
     }
 
     stages {
 
-        stage('Checkout SCM') {
+        stage('Checkout Code') {
             steps {
                 echo "Checking out Git repository..."
                 checkout([$class: 'GitSCM', 
@@ -20,12 +20,22 @@ pipeline {
             }
         }
 
-        stage('Run Ansible Playbook') {
+        stage('Deploy Zookeeper') {
             steps {
-                echo "Running Ansible playbook to deploy Kafka cluster..."
+                echo "Deploying Zookeeper cluster..."
                 sh '''
                 export ANSIBLE_HOST_KEY_CHECKING=False
-                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY
+                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags zookeeper
+                '''
+            }
+        }
+
+        stage('Deploy Kafka') {
+            steps {
+                echo "Deploying Kafka cluster..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags kafka
                 '''
             }
         }
@@ -33,7 +43,7 @@ pipeline {
 
     post {
         success {
-            echo "Kafka cluster deployed successfully!"
+            echo "Zookeeper & Kafka clusters deployed successfully!"
         }
         failure {
             echo "Deployment failed. Please check the logs."
