@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DYNAMIC_INVENTORY = 'aws_ec2.yml'
+        DYNAMIC_INVENTORY = 'kafkacluster/aws_ec2.yml'
     }
 
     options {
