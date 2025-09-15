@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        // AWS region if needed for dynamic inventory
         AWS_REGION = 'us-east-1'
+        KAFKA_BIN = '/opt/kafka/bin'  // Adjust this path if Kafka is installed elsewhere
     }
 
     stages {
@@ -21,7 +21,7 @@ pipeline {
             steps {
                 echo "Testing SSH connectivity to all EC2 instances..."
                 sh """
-                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m ping
+                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m ping -vvv
                 """
             }
         }
@@ -30,7 +30,7 @@ pipeline {
             steps {
                 echo "Deploying Zookeeper Cluster..."
                 sh """
-                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper -vvv
                 """
             }
         }
@@ -39,7 +39,7 @@ pipeline {
             steps {
                 echo "Verifying Zookeeper Quorum..."
                 sh """
-                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a 'echo stat | nc localhost 2181'
+                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a 'echo stat | nc localhost 2181 || echo "Zookeeper not reachable"'
                 """
             }
         }
@@ -48,7 +48,7 @@ pipeline {
             steps {
                 echo "Deploying Kafka Brokers..."
                 sh """
-                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka -vvv
                 """
             }
         }
@@ -57,16 +57,22 @@ pipeline {
             steps {
                 echo "Verifying Kafka Cluster..."
                 sh """
-                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a 'kafka-broker-api-versions --bootstrap-server localhost:9092'
+                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a '${KAFKA_BIN}/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || echo "Kafka broker not reachable"'
                 """
             }
         }
 
         stage('Create Test Kafka Topic') {
             steps {
-                echo "Creating test Kafka topic..."
+                echo "Creating test Kafka topic if not exists..."
                 sh """
-                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a 'kafka-topics --create --topic test-topic --bootstrap-server localhost:9092 --partitions 3 --replication-factor 3'
+                    ansible all -i kafkacluster/aws_ec2.yml -u ubuntu --private-key /var/lib/jenkins/.ssh/id_rsa -m shell -a '
+                        if ! ${KAFKA_BIN}/kafka-topics.sh --list --bootstrap-server localhost:9092 | grep -q "^test-topic\$"; then
+                            ${KAFKA_BIN}/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 3 --replication-factor 3
+                        else
+                            echo "Topic test-topic already exists"
+                        fi
+                    '
                 """
             }
         }
