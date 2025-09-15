@@ -2,34 +2,34 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
-        AWS_ACCESS_KEY_ID = credentials('aws-creds')   // your Jenkins credential ID
-        AWS_SECRET_ACCESS_KEY = credentials('aws-creds') // same ID if username/password type
+        // AWS credentials stored in Jenkins (replace 'aws-creds' with your Jenkins credential ID)
+        AWS_ACCESS_KEY_ID     = credentials('aws-creds')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-creds')
+        AWS_DEFAULT_REGION    = 'us-east-1'
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                echo "Checking out code from Git..."
-                git branch: 'main', url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
+                git branch: 'main',
+                    url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
             }
         }
 
         stage('Deploy Zookeeper Cluster') {
             steps {
-                sh '''
-                    echo "Deploying Zookeeper Cluster..."
-                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper
-                '''
+                echo 'Deploying Zookeeper Cluster...'
+                sh 'ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper'
             }
         }
 
         stage('Verify Zookeeper Quorum') {
             steps {
+                echo 'Verifying Zookeeper quorum...'
                 sh '''
-                    echo "Verifying Zookeeper quorum..."
-                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    ansible all -i kafkacluster/aws_ec2.yml \
+                    -m shell \
                     -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" -u ubuntu
                 '''
             }
@@ -37,18 +37,17 @@ pipeline {
 
         stage('Deploy Kafka Brokers') {
             steps {
-                sh '''
-                    echo "Deploying Kafka Brokers..."
-                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka
-                '''
+                echo 'Deploying Kafka Brokers...'
+                sh 'ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka'
             }
         }
 
         stage('Verify Kafka Cluster') {
             steps {
+                echo 'Verifying Kafka brokers...'
                 sh '''
-                    echo "Verifying Kafka brokers..."
-                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    ansible all -i kafkacluster/aws_ec2.yml \
+                    -m shell \
                     -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
                 '''
             }
@@ -56,9 +55,10 @@ pipeline {
 
         stage('Create Test Kafka Topic') {
             steps {
+                echo 'Creating test Kafka topic...'
                 sh '''
-                    echo "Creating test Kafka topic..."
-                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    ansible all -i kafkacluster/aws_ec2.yml \
+                    -m shell \
                     -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
                 '''
             }
@@ -66,23 +66,15 @@ pipeline {
 
         stage('Clean Workspace') {
             steps {
-                echo "Cleaning workspace..."
+                echo 'Cleaning workspace...'
                 cleanWs()
             }
         }
-
     }
 
     post {
-        success {
-            echo "Kafka & Zookeeper deployment completed successfully."
-        }
-        failure {
-            echo "Deployment failed. Check the logs!"
-        }
         always {
-            echo "Pipeline finished."
+            echo 'Kafka & Zookeeper deployment pipeline finished.'
         }
     }
-
 }
