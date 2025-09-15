@@ -1,16 +1,16 @@
 pipeline {
     agent any
 
-    options {
-        skipDefaultCheckout true
-        timestamps()
+    environment {
+        AWS_ACCESS_KEY_ID = credentials('aws_access_key_id')       // Jenkins credential ID
+        AWS_SECRET_ACCESS_KEY = credentials('aws_secret_access_key')
+        AWS_REGION = 'us-east-1'                                   // your region
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
+                git branch: 'main', url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
             }
         }
 
@@ -58,12 +58,12 @@ pipeline {
                 '''
             }
         }
-    }
 
-    post {
-        always {
-            echo "Cleaning up workspace..."
-            cleanWs()
+        stage('Clean Workspace') {
+            steps {
+                echo "Cleaning up workspace..."
+                cleanWs()
+            }
         }
     }
 }
