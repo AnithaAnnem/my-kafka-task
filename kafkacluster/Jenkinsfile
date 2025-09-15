@@ -2,48 +2,61 @@ pipeline {
     agent any
 
     environment {
-        // Inject AWS credentials into environment
-        AWS_ACCESS_KEY_ID     = credentials('AWS-creds') // AWS access key from Jenkins credentials
-        AWS_SECRET_ACCESS_KEY = credentials('AWS-creds')
-        AWS_DEFAULT_REGION    = 'us-east-1' // Change if your region is different
-        JAVA_HOME             = '/usr/lib/jvm/java-11-openjdk-amd64' // Ensure Java is already installed
-        PATH                  = "${env.JAVA_HOME}/bin:${env.PATH}"
+        // Use the SSH credentials stored in Jenkins
+        EC2_CREDS = credentials('AWS-SSH-key')
     }
 
     stages {
-
         stage('Deploy Zookeeper Cluster') {
             steps {
                 echo "Deploying Zookeeper Cluster..."
-                sh "ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper"
+                sh '''
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper \
+                    -u ${EC2_CREDS_USR} --private-key ${EC2_CREDS_PSW}
+                '''
             }
         }
 
         stage('Verify Zookeeper Quorum') {
             steps {
                 echo "Verifying Zookeeper quorum..."
-                sh "ansible all -i kafkacluster/aws_ec2.yml -m shell -a '/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status' -u ubuntu"
+                sh '''
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" \
+                    -u ${EC2_CREDS_USR} --private-key ${EC2_CREDS_PSW}
+                '''
             }
         }
 
         stage('Deploy Kafka Brokers') {
             steps {
                 echo "Deploying Kafka Brokers..."
-                sh "ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka"
+                sh '''
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka \
+                    -u ${EC2_CREDS_USR} --private-key ${EC2_CREDS_PSW}
+                '''
             }
         }
 
         stage('Verify Kafka Cluster') {
             steps {
                 echo "Verifying Kafka brokers..."
-                sh "ansible all -i kafkacluster/aws_ec2.yml -m shell -a '/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092' -u ubuntu"
+                sh '''
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092" \
+                    -u ${EC2_CREDS_USR} --private-key ${EC2_CREDS_PSW}
+                '''
             }
         }
 
         stage('Create Test Kafka Topic') {
             steps {
                 echo "Creating test Kafka topic..."
-                sh "ansible all -i kafkacluster/aws_ec2.yml -m shell -a '/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092' -u ubuntu"
+                sh '''
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell \
+                    -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092" \
+                    -u ${EC2_CREDS_USR} --private-key ${EC2_CREDS_PSW}
+                '''
             }
         }
 
