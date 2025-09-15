@@ -2,72 +2,62 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
+        SSH_KEY = 'AWS-SSH-key'          // Your Jenkins SSH credential
+        SSH_USER = 'ubuntu'              // Default user for your EC2 instances
+        ANSIBLE_INVENTORY = 'aws_ec2.yml' // Your dynamic inventory file
+        PLAYBOOK = 'site.yml'             // Main Ansible playbook
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout SCM') {
             steps {
-                echo "Checking out Kafka cluster code..."
-                git branch: 'main',
-                    url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
+                echo "Checking out Kafka cluster repository..."
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], 
+                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]])
             }
         }
 
-        stage('Test SSH Connectivity') {
+        stage('Install Ansible Requirements') {
             steps {
-                echo "Testing SSH connectivity to all EC2 instances..."
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'AWS-creds'
-                ]]) {
-                    sh """
-                        ansible all -i kafkacluster/aws_ec2.yml -u ubuntu -m ping -vvv
-                    """
-                }
+                echo "Installing requirements if needed..."
+                sh 'ansible --version || sudo apt-get update && sudo apt-get install -y ansible python3-pip'
             }
         }
 
-        stage('Deploy Zookeeper Cluster') {
+        stage('Run Ansible Playbook') {
             steps {
-                echo "Deploying Zookeeper Cluster..."
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'AWS-creds'
-                ]]) {
-                    sh """
-                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper
-                    """
-                }
+                echo "Running Ansible playbook to deploy Kafka cluster..."
+                sh """
+                    ansible-playbook -i ${ANSIBLE_INVENTORY} ${PLAYBOOK} -u ${SSH_USER} --private-key ${SSH_KEY}
+                """
             }
         }
 
-        stage('Deploy Kafka Brokers') {
+        stage('Verify Services') {
             steps {
-                echo "Deploying Kafka Brokers..."
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'AWS-creds'
-                ]]) {
-                    sh """
-                        ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka
-                    """
-                }
-            }
-        }
-
-        stage('Clean Workspace') {
-            steps {
-                echo "Cleaning workspace..."
-                cleanWs()
+                echo "Checking Kafka and Zookeeper services on all nodes..."
+                sh """
+                    ansible all -i ${ANSIBLE_INVENTORY} -u ${SSH_USER} --private-key ${SSH_KEY} -m shell -a 'sudo systemctl status zookeeper kafka --no-pager'
+                """
+                echo "Listing running Kafka/Zookeeper processes..."
+                sh """
+                    ansible all -i ${ANSIBLE_INVENTORY} -u ${SSH_USER} --private-key ${SSH_KEY} -m shell -a "ps -ef | grep -E 'kafka|zookeeper' | grep -v grep"
+                """
             }
         }
     }
 
     post {
-        success { echo "Deployment completed successfully!" }
-        failure { echo "Deployment failed. Check logs for errors." }
-        always { echo "Pipeline finished." }
+        success {
+            echo "Kafka cluster deployed successfully!"
+        }
+        failure {
+            echo "Deployment failed. Please check the logs."
+        }
+        always {
+            echo "Cleaning workspace..."
+            cleanWs()
+        }
     }
 }
