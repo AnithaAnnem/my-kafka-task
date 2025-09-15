@@ -1,106 +1,69 @@
 pipeline {
     agent any
 
-    environment {
-        DYNAMIC_INVENTORY = 'kafkacluster/aws_ec2.yml'
-    }
-
     options {
         skipDefaultCheckout true
         timestamps()
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
-            }
-        }
-
-        stage('Prepare Environment') {
-            steps {
-                withCredentials([string(credentialsId: 'my-aws-creds', variable: 'AWS_CREDS')]) {
-                    sh '''
-                        export AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | cut -d: -f1)
-                        export AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDS | cut -d: -f2)
-
-                        echo "Installing Java and required packages on all nodes"
-                        ansible all -i $DYNAMIC_INVENTORY -m apt -a "name=default-jdk state=present update_cache=yes" -u ubuntu
-                    '''
-                }
+                git branch: 'main',
+                    url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
             }
         }
 
         stage('Deploy Zookeeper Cluster') {
             steps {
-                withCredentials([string(credentialsId: 'my-aws-creds', variable: 'AWS_CREDS')]) {
-                    sh '''
-                        export AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | cut -d: -f1)
-                        export AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDS | cut -d: -f2)
-
-                        echo "Running Zookeeper role via Ansible"
-                        ansible-playbook -i $DYNAMIC_INVENTORY kafkacluster/site.yml --tags zookeeper
-                    '''
-                }
+                sh '''
+                    echo "Deploying Zookeeper Cluster..."
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags zookeeper
+                '''
             }
         }
 
         stage('Verify Zookeeper Quorum') {
             steps {
-                withCredentials([string(credentialsId: 'my-aws-creds', variable: 'AWS_CREDS')]) {
-                    sh '''
-                        export AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | cut -d: -f1)
-                        export AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDS | cut -d: -f2)
-
-                        echo "Checking Zookeeper nodes"
-                        ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" -u ubuntu
-                    '''
-                }
+                sh '''
+                    echo "Verifying Zookeeper quorum..."
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" -u ubuntu
+                '''
             }
         }
 
         stage('Deploy Kafka Brokers') {
             steps {
-                withCredentials([string(credentialsId: 'my-aws-creds', variable: 'AWS_CREDS')]) {
-                    sh '''
-                        export AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | cut -d: -f1)
-                        export AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDS | cut -d: -f2)
-
-                        echo "Running Kafka role via Ansible"
-                        ansible-playbook -i $DYNAMIC_INVENTORY kafkacluster/site.yml --tags kafka
-                    '''
-                }
+                sh '''
+                    echo "Deploying Kafka Brokers..."
+                    ansible-playbook -i kafkacluster/aws_ec2.yml kafkacluster/site.yml --tags kafka
+                '''
             }
         }
 
         stage('Verify Kafka Cluster') {
             steps {
-                withCredentials([string(credentialsId: 'my-aws-creds', variable: 'AWS_CREDS')]) {
-                    sh '''
-                        export AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | cut -d: -f1)
-                        export AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDS | cut -d: -f2)
-
-                        echo "Checking Kafka brokers"
-                        ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092" -u ubuntu
-                    '''
-                }
+                sh '''
+                    echo "Verifying Kafka brokers..."
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
+                '''
             }
         }
 
-        stage('Optional: Create Test Topic') {
+        stage('Create Test Topic') {
             steps {
-                withCredentials([string(credentialsId: 'my-aws-creds', variable: 'AWS_CREDS')]) {
-                    sh '''
-                        export AWS_ACCESS_KEY_ID=$(echo $AWS_CREDS | cut -d: -f1)
-                        export AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDS | cut -d: -f2)
-
-                        echo "Creating test topic"
-                        ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server localhost:9092" -u ubuntu
-                    '''
-                }
+                sh '''
+                    echo "Creating test Kafka topic..."
+                    ansible all -i kafkacluster/aws_ec2.yml -m shell -a "/opt/kafka/kafka_2.13-3.7.0/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
+                '''
             }
         }
+    }
 
+    post {
+        always {
+            echo "Cleaning up workspace..."
+            cleanWs()
+        }
     }
 }
