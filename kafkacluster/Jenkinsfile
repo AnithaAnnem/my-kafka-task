@@ -2,55 +2,52 @@ pipeline {
     agent any
 
     environment {
-        SSH_KEY = 'AWS-SSH-key'          // Your Jenkins SSH credential
-        SSH_USER = 'ubuntu'              // Default user for your EC2 instances
-        ANSIBLE_INVENTORY = 'aws_ec2.yml' // Your dynamic inventory file
-        PLAYBOOK = 'site.yml'             // Main Ansible playbook
+        SSH_USER = 'ubuntu'
+        SSH_KEY = 'AWS-SSH-key'
+        PLAYBOOK = 'kafkacluster/site.yml'
+        INVENTORY = 'kafkacluster/aws_ec2.yml'
     }
 
     stages {
 
         stage('Checkout SCM') {
             steps {
-                echo "Checking out Kafka cluster repository..."
-                checkout([$class: 'GitSCM', branches: [[name: '*/main']], 
-                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]] )
+                checkout scm
             }
         }
 
         stage('Run Ansible Playbook') {
             steps {
-                echo "Running Ansible playbook to deploy Kafka cluster..."
+                echo 'Running Ansible playbook to deploy Kafka cluster...'
                 sh """
-                    ansible-playbook -i ${ANSIBLE_INVENTORY} ${PLAYBOOK} -u ${SSH_USER} --private-key ${SSH_KEY}
+                    ansible-playbook -i ${INVENTORY} ${PLAYBOOK} -u ${SSH_USER} --private-key ${SSH_KEY}
                 """
             }
         }
 
         stage('Verify Services') {
             steps {
-                echo "Checking Kafka and Zookeeper services on all nodes..."
-                sh """
-                    ansible all -i ${ANSIBLE_INVENTORY} -u ${SSH_USER} --private-key ${SSH_KEY} -m shell -a 'sudo systemctl status zookeeper kafka --no-pager'
-                """
-                echo "Listing running Kafka/Zookeeper processes..."
-                sh """
-                    ansible all -i ${ANSIBLE_INVENTORY} -u ${SSH_USER} --private-key ${SSH_KEY} -m shell -a "ps -ef | grep -E 'kafka|zookeeper' | grep -v grep"
-                """
+                echo 'Verifying Kafka and Zookeeper services...'
+                sh '''
+                    for host in $(ansible -i ${INVENTORY} all --list-hosts | tail -n +2); do
+                        ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${SSH_USER}@${host} \
+                        "systemctl status kafka && systemctl status zookeeper"
+                    done
+                '''
             }
         }
     }
 
     post {
+        always {
+            echo 'Cleaning workspace...'
+            cleanWs()
+        }
         success {
-            echo "Kafka cluster deployed successfully!"
+            echo 'Kafka cluster deployed successfully!'
         }
         failure {
-            echo "Deployment failed. Please check the logs."
-        }
-        always {
-            echo "Cleaning workspace..."
-            cleanWs()
+            echo 'Deployment failed. Please check the logs.'
         }
     }
 }
