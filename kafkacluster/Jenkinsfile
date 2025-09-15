@@ -31,7 +31,7 @@ pipeline {
             steps {
                 echo "Running Zookeeper role via Ansible"
                 sh """
-                ansible-playbook -i $DYNAMIC_INVENTORY kafkacluster/site.yml 
+                ansible-playbook -i $DYNAMIC_INVENTORY kafkacluster/site.yml --tags zookeeper
                 """
             }
         }
@@ -49,7 +49,7 @@ pipeline {
             steps {
                 echo "Running Kafka role via Ansible"
                 sh """
-                ansible-playbook -i $DYNAMIC_INVENTORY kafkacluster/site.yml
+                ansible-playbook -i $DYNAMIC_INVENTORY kafkacluster/site.yml --tags kafka
                 """
             }
         }
