@@ -8,6 +8,10 @@ pipeline {
         PLAYBOOK          = 'kafkacluster/site.yml'
         GIT_REPO          = 'https://github.com/AnithaAnnem/my-kafka-task.git'
         GIT_BRANCH        = 'main'
+        ANSIBLE_KEY   = '/var/lib/jenkins/.ssh/MYKAFKA.pem'
+        ANSIBLE_USER  = 'ubuntu'
+        INVENTORY     = 'kafkacluster/aws_ec2.yml'
+        PLAYBOOK      = 'kafkacluster/site.yml'
     }
 
     stages {
@@ -18,6 +22,8 @@ pipeline {
                 checkout([$class: 'GitSCM', 
                           branches: [[name: "*/${GIT_BRANCH}"]], 
                           userRemoteConfigs: [[url: "${GIT_REPO}"]]
+                          branches: [[name: '*/main']], 
+                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]
                 ])
             }
         }
@@ -29,6 +35,12 @@ pipeline {
                 sh '''
                 export ANSIBLE_HOST_KEY_CHECKING=False
                 ansible-lint $PLAYBOOK
+        stage('Deploy Zookeeper') {
+            steps {
+                echo "Deploying Zookeeper cluster..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags zookeeper
                 '''
             }
         }
@@ -39,9 +51,16 @@ pipeline {
                 sh '''
                 export ANSIBLE_HOST_KEY_CHECKING=False
                 ansible-playbook -i $INVENTORY $PLAYBOOK --syntax-check
+        stage('Deploy Kafka') {
+            steps {
+                echo "Deploying Kafka cluster..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags kafka
                 '''
             }
         }
+    }
 
         stage('Ansible Dry Run (Check Mode)') {
             steps {
@@ -81,6 +100,17 @@ pipeline {
         }
         failure {
             echo "Pipeline failed. Please check the logs."
+        }
+        always {
+            echo "Cleaning workspace..."
+            cleanWs()
+        }
+    post {
+        success {
+            echo "Zookeeper & Kafka clusters deployed successfully!"
+        }
+        failure {
+            echo "Deployment failed. Please check the logs."
         }
         always {
             echo "Cleaning workspace..."
