@@ -1,2 +1,6 @@
 ---
-# handlers file for roles/kafka
+- name: restart kafka
+  systemd:
+    name: kafka
+    state: restarted
+  become: yes

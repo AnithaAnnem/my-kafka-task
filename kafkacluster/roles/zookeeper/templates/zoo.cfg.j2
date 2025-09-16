@@ -1,10 +1,10 @@
-tickTime=2000
+tickTime={{ zookeeper_tick_time }}
 dataDir={{ zookeeper_data_dir }}/data
 dataLogDir={{ zookeeper_data_dir }}/log
-clientPort=2181
-initLimit=5
-syncLimit=2
+clientPort={{ zookeeper_client_port }}
+initLimit={{ zookeeper_init_limit }}
+syncLimit={{ zookeeper_sync_limit }}
 
-{% for host in zookeeper_hosts %}
-server.{{ host.id }}={{ host.ip }}:2888:3888
+{% for host in play_hosts %}
+server.{{ loop.index }}={{ hostvars[host].ansible_default_ipv4.address }}:2888:3888
 {% endfor %}

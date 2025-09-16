@@ -1,2 +1,7 @@
+# roles/zookeeper/handlers/main.yml
 ---
-# handlers file for roles/zookeeper
+- name: restart zookeeper
+  systemd:
+    name: zookeeper
+    state: restarted
+  become: yes

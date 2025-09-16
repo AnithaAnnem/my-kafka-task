@@ -1,96 +1,50 @@
 ---
-# 0. Ensure bash is installed
-- name: Ensure bash is installed
-  apt:
-    name: bash
-    state: present
-    update_cache: yes
 
-# 0a. Verify bash exists
-- name: Verify bash is available
-  command: which bash
-  register: bash_path
-  changed_when: false
+# 0. Include prerequisites
+- name: Install prerequisites
+  include_tasks: prereqs.yml
 
-- debug:
-    msg: "Bash is installed at {{ bash_path.stdout }}"
-
-# 0b. Ensure zkServer.sh starts with correct bash shebang
-- name: Ensure zkServer.sh starts with correct bash shebang
-  lineinfile:
-    path: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin/bin/zkServer.sh"
-    regexp: '^#!'
-    line: '#!/usr/bin/env bash'
-    state: present
-    backrefs: yes
-  become: yes
-
-# 1. Install Java
-- name: Install Java
-  apt:
-    name: default-jdk
-    state: present
-    update_cache: yes
-
-# 1a. Set default Java to Java 11
-- name: Set default Java to Java 11
-  alternatives:
-    name: java
-    path: "{{ java_home }}/bin/java"
-
-# 1b. Set JAVA_HOME system-wide
-- name: Set JAVA_HOME system-wide
-  copy:
-    dest: /etc/profile.d/java.sh
-    content: |
-      export JAVA_HOME={{ java_home }}
-      export PATH=$JAVA_HOME/bin:$PATH
-    owner: root
-    group: root
-    mode: '0755'
-
-# 1c. Install core utilities
-- name: Install core utilities
-  apt:
-    name:
-      - coreutils
-      - grep
-      - sed
-      - procps
-    state: present
-    update_cache: yes
-
-# 2. Create zookeeper group
+# 1. Create zookeeper group
 - name: Create zookeeper group
   group:
     name: "{{ zookeeper_group }}"
     state: present
+  become: yes
 
-# 3. Create zookeeper user
+# 2. Create zookeeper user
 - name: Create zookeeper user
   user:
     name: "{{ zookeeper_user }}"
     group: "{{ zookeeper_group }}"
     create_home: no
     shell: /bin/false
+  become: yes
 
-# 4. Create Zookeeper install directory
-- name: Create Zookeeper install directory
+# 3. Create directories
+- name: Create Zookeeper install and data directories
   file:
-    path: "{{ zookeeper_install_dir }}"
+    path: "{{ item }}"
     state: directory
     owner: "{{ zookeeper_user }}"
     group: "{{ zookeeper_group }}"
     mode: '0755'
+  loop:
+    - "{{ zookeeper_install_dir }}"
+    - "{{ zookeeper_data_dir }}/data"
+    - "{{ zookeeper_data_dir }}/log"
+    - "{{ zookeeper_install_dir }}/logs"
+    - "/var/run/zookeeper"
+  become: yes
 
-# 5. Download Zookeeper tarball
+# 4. Download Zookeeper tarball
 - name: Download Zookeeper tarball
   get_url:
-    url: "https://archive.apache.org/dist/zookeeper/zookeeper-{{ zookeeper_version }}/apache-zookeeper-{{ zookeeper_version }}-bin.tar.gz"
+    url: "{{ zookeeper_tarball_url }}"
     dest: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin.tar.gz"
     mode: '0644'
+  become: yes
 
-# 6. Extract Zookeeper
+# 5. Extract Zookeeper
 - name: Extract Zookeeper
   unarchive:
     src: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin.tar.gz"
@@ -99,40 +53,7 @@
     creates: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin"
   become: yes
 
-# 7. Create Zookeeper directories
-- name: Ensure snapshot/data directory exists
-  file:
-    path: "{{ zookeeper_data_dir }}/data"
-    state: directory
-    owner: "{{ zookeeper_user }}"
-    group: "{{ zookeeper_group }}"
-    mode: '0755'
-
-- name: Ensure transaction log directory exists
-  file:
-    path: "{{ zookeeper_data_dir }}/log"
-    state: directory
-    owner: "{{ zookeeper_user }}"
-    group: "{{ zookeeper_group }}"
-    mode: '0755'
-
-- name: Ensure Zookeeper logs directory exists
-  file:
-    path: "{{ zookeeper_install_dir }}/logs"
-    state: directory
-    owner: "{{ zookeeper_user }}"
-    group: "{{ zookeeper_group }}"
-    mode: '0755'
-
-- name: Ensure runtime directory for Zookeeper PID
-  file:
-    path: /var/run/zookeeper
-    state: directory
-    owner: "{{ zookeeper_user }}"
-    group: "{{ zookeeper_group }}"
-    mode: '0755'
-
-# 8. Fix ownership recursively
+# 6. Fix ownership recursively
 - name: Fix ownership for Zookeeper directories
   file:
     path: "{{ item }}"
@@ -145,20 +66,24 @@
     - "{{ zookeeper_data_dir }}/log"
     - "{{ zookeeper_install_dir }}/logs"
     - "/var/run/zookeeper"
+  become: yes
 
-# 9. Set myid for this node
-- name: Set myid for this node
-  copy:
-    content: >-
-      {{
-        (zookeeper_hosts | selectattr('ip', 'equalto', ansible_host) | map(attribute='id') | list | first)
-      }}
+# 7. Set Zookeeper node ID
+- name: Set zookeeper_id
+  set_fact:
+    zookeeper_id: "{{ play_hosts.index(inventory_hostname) + 1 }}"
+
+# 8. Configure myid via template
+- name: Write myid file
+  template:
+    src: myid.j2
     dest: "{{ zookeeper_data_dir }}/data/myid"
     mode: '0644'
     owner: "{{ zookeeper_user }}"
     group: "{{ zookeeper_group }}"
+  become: yes
 
-# 10. Configure zoo.cfg
+# 9. Configure zoo.cfg
 - name: Configure zoo.cfg
   template:
     src: zoo.cfg.j2
@@ -166,22 +91,26 @@
     mode: '0644'
     owner: "{{ zookeeper_user }}"
     group: "{{ zookeeper_group }}"
+  become: yes
 
-# 11. Create systemd service
+# 10. Create systemd service
 - name: Create systemd service file for Zookeeper
   template:
     src: zookeeper.service.j2
     dest: /etc/systemd/system/zookeeper.service
     mode: '0644'
+  become: yes
 
-# 12. Reload systemd daemon
+# 11. Reload systemd daemon
 - name: Reload systemd daemon
-  command: systemctl daemon-reload
+  systemd:
+    daemon_reload: yes
+  become: yes
 
-# 13. Enable and start Zookeeper service
+# 12. Enable and start Zookeeper service
 - name: Enable and start Zookeeper service
   systemd:
     name: zookeeper
     enabled: yes
     state: started
-    daemon_reload: yes
+  become: yes

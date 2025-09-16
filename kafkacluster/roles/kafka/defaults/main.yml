@@ -1,2 +1,21 @@
 ---
-# defaults file for roles/kafka
+# Kafka versioning
+kafka_version: "3.7.0"
+kafka_package: "kafka_2.13-{{ kafka_version }}"
+kafka_download_url: "https://archive.apache.org/dist/kafka/{{ kafka_version }}/{{ kafka_package }}.tgz"
+
+# Installation paths
+kafka_install_dir: "/opt/kafka"
+kafka_data_dir: "/var/lib/kafka"
+kafka_pid_dir: "/var/run/kafka"
+kafka_port: 9092
+
+# Log retention settings
+kafka_log_retention_hours: 168
+kafka_log_segment_bytes: 1073741824
+kafka_log_check_interval_ms: 300000
+
+
+# User and group (overridable if needed)
+kafka_user: kafka
+kafka_group: kafka

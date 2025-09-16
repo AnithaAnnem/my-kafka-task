@@ -1,0 +1,35 @@
+---
+# Install prerequisites for Zookeeper
+
+- name: Ensure bash is installed
+  apt:
+    name: bash
+    state: present
+    update_cache: yes
+
+- name: Verify bash is available
+  command: which bash
+  register: bash_path
+  changed_when: false
+
+- debug:
+    msg: "Bash is installed at {{ bash_path.stdout }}"
+
+- name: Ensure zkServer.sh starts with correct bash shebang
+  lineinfile:
+    path: "{{ zookeeper_install_dir }}/apache-zookeeper-{{ zookeeper_version }}-bin/bin/zkServer.sh"
+    regexp: '^#!'
+    line: '#!/usr/bin/env bash'
+    state: present
+    backrefs: yes
+  become: yes
+
+- name: Install core utilities
+  apt:
+    name:
+      - coreutils
+      - grep
+      - sed
+      - procps
+    state: present
+    update_cache: yes

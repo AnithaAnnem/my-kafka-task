@@ -1,35 +1,11 @@
 ---
-# 1. Install Java
-- name: Install Java
-  apt:
-    name: default-jdk
-    state: present
-    update_cache: yes
-
-# 1a. Set default Java to Java 11
-- name: Set default Java to Java 11
-  alternatives:
-    name: java
-    path: /usr/lib/jvm/java-11-openjdk-amd64/bin/java
-
-# 1b. Set JAVA_HOME system-wide
-- name: Set JAVA_HOME system-wide
-  copy:
-    dest: /etc/profile.d/java.sh
-    content: |
-      export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-      export PATH=$JAVA_HOME/bin:$PATH
-    owner: root
-    group: root
-    mode: '0755'
-
-# 2. Create Kafka group
+# 1. Create Kafka group
 - name: Create Kafka group
   group:
     name: "{{ kafka_group }}"
     state: present
 
-# 3. Create Kafka user
+# 2. Create Kafka user
 - name: Create Kafka user
   user:
     name: "{{ kafka_user }}"
@@ -37,7 +13,7 @@
     create_home: no
     shell: /bin/false
 
-# 4. Create Kafka installation directory
+# 3. Create Kafka install directory
 - name: Create Kafka install directory
   file:
     path: "{{ kafka_install_dir }}"
@@ -45,71 +21,68 @@
     owner: "{{ kafka_user }}"
     group: "{{ kafka_group }}"
     mode: '0755'
+  become: yes
 
-# 4a. Ensure Kafka install logs directory exists
-- name: Create Kafka install logs directory
-  file:
-    path: "{{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/logs"
-    state: directory
-    owner: "{{ kafka_user }}"
-    group: "{{ kafka_group }}"
-    mode: '0755'
-
-# 5. Download Kafka tarball
+# 4. Download Kafka tarball
 - name: Download Kafka
   get_url:
-    url: "https://archive.apache.org/dist/kafka/{{ kafka_version }}/kafka_2.13-{{ kafka_version }}.tgz"
-    dest: "{{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}.tgz"
+    url: "{{ kafka_download_url }}"
+    dest: "{{ kafka_install_dir }}/{{ kafka_package }}.tgz"
     mode: '0644'
+  become: yes
 
-# 6. Extract Kafka
+# 5. Extract Kafka
 - name: Extract Kafka
   unarchive:
-    src: "{{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}.tgz"
+    src: "{{ kafka_install_dir }}/{{ kafka_package }}.tgz"
     dest: "{{ kafka_install_dir }}/"
     remote_src: yes
-    creates: "{{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}"
+    creates: "{{ kafka_install_dir }}/{{ kafka_package }}"
     owner: "{{ kafka_user }}"
     group: "{{ kafka_group }}"
+  become: yes
 
-# 7. Create Kafka data/log/PID directories
-- name: Create Kafka data directory
+# 6. Create Kafka data and PID directories
+- name: Create Kafka data and PID directories
   file:
-    path: "{{ kafka_data_dir }}"
+    path: "{{ item }}"
     state: directory
     owner: "{{ kafka_user }}"
     group: "{{ kafka_group }}"
     mode: '0755'
+  loop:
+    - "{{ kafka_data_dir }}"
+    - "{{ kafka_data_dir }}/logs"
+    - "{{ kafka_pid_dir }}"
+  become: yes
 
-- name: Create Kafka data logs directory
+# 7. Fix ownership of Kafka directories
+- name: Ensure Kafka directories ownership
   file:
-    path: "{{ kafka_data_dir }}/logs"
-    state: directory
+    path: "{{ item }}"
     owner: "{{ kafka_user }}"
     group: "{{ kafka_group }}"
-    mode: '0755'
-
-- name: Create Kafka PID directory
-  file:
-    path: /tmp/kafka
-    state: directory
-    owner: "{{ kafka_user }}"
-    group: "{{ kafka_group }}"
-    mode: '0755'
+    recurse: yes
+  loop:
+    - "{{ kafka_install_dir }}/{{ kafka_package }}"
+    - "{{ kafka_data_dir }}"
+    - "{{ kafka_pid_dir }}"
+  become: yes
 
 # 8. Set broker.id dynamically
 - name: Set broker ID
   set_fact:
-    broker_id: "{{ (kafka_hosts | selectattr('name', 'equalto', inventory_hostname) | map(attribute='id') | list | first) }}"
+    broker_id: "{{ play_hosts.index(inventory_hostname) + 1 }}"
 
 # 9. Configure Kafka server.properties
 - name: Configure Kafka server.properties
   template:
     src: server.properties.j2
-    dest: "{{ kafka_install_dir }}/kafka_2.13-{{ kafka_version }}/config/server.properties"
+    dest: "{{ kafka_install_dir }}/{{ kafka_package }}/config/server.properties"
     mode: '0644'
     owner: "{{ kafka_user }}"
     group: "{{ kafka_group }}"
+  become: yes
 
 # 10. Create systemd service for Kafka
 - name: Create Kafka systemd service
@@ -117,10 +90,13 @@
     src: kafka.service.j2
     dest: /etc/systemd/system/kafka.service
     mode: '0644'
+  become: yes
 
 # 11. Reload systemd daemon
 - name: Reload systemd daemon
-  command: systemctl daemon-reload
+  systemd:
+    daemon_reload: yes
+  become: yes
 
 # 12. Enable and start Kafka service
 - name: Enable and start Kafka service
@@ -128,4 +104,4 @@
     name: kafka
     enabled: yes
     state: started
-    daemon_reload: yes
+  become: yes
