@@ -2,75 +2,89 @@ pipeline {
     agent any
 
     environment {
-        DYNAMIC_INVENTORY = 'aws_ec2.yml'
-    }
-
-    options {
-        skipDefaultCheckout true
-        timestamps()
+        ANSIBLE_KEY       = '/var/lib/jenkins/.ssh/MYKAFKA.pem'
+        ANSIBLE_USER      = 'ubuntu'
+        INVENTORY         = 'kafkacluster/aws_ec2.yml'
+        PLAYBOOK          = 'kafkacluster/site.yml'
+        GIT_REPO          = 'https://github.com/AnithaAnnem/my-kafka-task.git'
+        GIT_BRANCH        = 'main'
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/AnithaAnnem/my-kafka-task.git'
+                echo "Checking out Git repository..."
+                checkout([$class: 'GitSCM', 
+                          branches: [[name: "*/${GIT_BRANCH}"]], 
+                          userRemoteConfigs: [[url: "${GIT_REPO}"]]
+                ])
             }
         }
 
-        stage('Prepare Environment') {
+        // ----------------- Ansible CI Checks -----------------
+        stage('Ansible Lint') {
             steps {
-                echo "Installing Java and required packages on all nodes"
-                sh """
-                ansible all -i $DYNAMIC_INVENTORY -m apt -a "name=default-jdk state=present update_cache=yes" -u ubuntu
-                """
+                echo "Running ansible-lint..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-lint $PLAYBOOK
+                '''
             }
         }
 
-        stage('Deploy Zookeeper Cluster') {
+        stage('Ansible Syntax Check') {
             steps {
-                echo "Running Zookeeper role via Ansible"
-                sh """
-                ansible-playbook -i $DYNAMIC_INVENTORY site.yml --tags zookeeper
-                """
+                echo "Running Ansible syntax check..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-playbook -i $INVENTORY $PLAYBOOK --syntax-check
+                '''
             }
         }
 
-        stage('Verify Zookeeper Quorum') {
+        stage('Ansible Dry Run (Check Mode)') {
             steps {
-                echo "Checking Zookeeper nodes"
-                sh """
-                ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/zookeeper/apache-zookeeper-3.9.2-bin/bin/zkServer.sh status" -u ubuntu
-                """
+                echo "Running Ansible dry run (check mode)..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --check
+                '''
             }
         }
 
-        stage('Deploy Kafka Brokers') {
+        // ----------------- Deployment Stages -----------------
+        stage('Deploy Zookeeper') {
             steps {
-                echo "Running Kafka role via Ansible"
-                sh """
-                ansible-playbook -i $DYNAMIC_INVENTORY site.yml --tags kafka
-                """
+                echo "Deploying Zookeeper cluster..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags zookeeper
+                '''
             }
         }
 
-        stage('Verify Kafka Cluster') {
+        stage('Deploy Kafka') {
             steps {
-                echo "Checking Kafka brokers"
-                sh """
-                ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/kafka/kafka_2.13-{{ kafka_version }}/bin/kafka-broker-api-versions.sh --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
-                """
+                echo "Deploying Kafka cluster..."
+                sh '''
+                export ANSIBLE_HOST_KEY_CHECKING=False
+                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags kafka
+                '''
             }
         }
+    }
 
-        stage('Optional: Create Test Topic') {
-            steps {
-                echo "Creating test topic"
-                sh """
-                ansible all -i $DYNAMIC_INVENTORY -m shell -a "/opt/kafka/kafka_2.13-{{ kafka_version }}/bin/kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 3 --bootstrap-server {{ ansible_host }}:9092" -u ubuntu
-                """
-            }
+    post {
+        success {
+            echo "Ansible CI checks passed and Zookeeper & Kafka clusters deployed successfully!"
         }
-
+        failure {
+            echo "Pipeline failed. Please check the logs."
+        }
+        always {
+            echo "Cleaning workspace..."
+            cleanWs()
+        }
     }
 }
