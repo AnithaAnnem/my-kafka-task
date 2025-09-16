@@ -2,16 +2,12 @@ pipeline {
     agent any
 
     environment {
-        ANSIBLE_KEY       = '/var/lib/jenkins/.ssh/MYKAFKA.pem'
-        ANSIBLE_USER      = 'ubuntu'
-        INVENTORY         = 'kafkacluster/aws_ec2.yml'
-        PLAYBOOK          = 'kafkacluster/site.yml'
-        GIT_REPO          = 'https://github.com/AnithaAnnem/my-kafka-task.git'
-        GIT_BRANCH        = 'main'
         ANSIBLE_KEY   = '/var/lib/jenkins/.ssh/MYKAFKA.pem'
         ANSIBLE_USER  = 'ubuntu'
         INVENTORY     = 'kafkacluster/aws_ec2.yml'
         PLAYBOOK      = 'kafkacluster/site.yml'
+        GIT_REPO      = 'https://github.com/AnithaAnnem/my-kafka-task.git'
+        GIT_BRANCH    = 'main'
     }
 
     stages {
@@ -19,66 +15,51 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo "Checking out Git repository..."
-                checkout([$class: 'GitSCM', 
-                          branches: [[name: "*/${GIT_BRANCH}"]], 
+                checkout([$class: 'GitSCM',
+                          branches: [[name: "*/${GIT_BRANCH}"]],
                           userRemoteConfigs: [[url: "${GIT_REPO}"]]
-                          branches: [[name: '*/main']], 
-                          userRemoteConfigs: [[url: 'https://github.com/AnithaAnnem/my-kafka-task.git']]
                 ])
             }
         }
 
-        // ----------------- Ansible CI Checks -----------------
+        // ===== Ansible CI Checks =====
         stage('Ansible Lint') {
             steps {
-                echo "Running ansible-lint..."
+                echo "Running ansible-lint on playbooks..."
                 sh '''
                 export ANSIBLE_HOST_KEY_CHECKING=False
-                ansible-lint $PLAYBOOK
-        stage('Deploy Zookeeper') {
-            steps {
-                echo "Deploying Zookeeper cluster..."
-                sh '''
-                export ANSIBLE_HOST_KEY_CHECKING=False
-                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags zookeeper
+                ansible-lint ${PLAYBOOK}
                 '''
             }
         }
 
         stage('Ansible Syntax Check') {
             steps {
-                echo "Running Ansible syntax check..."
+                echo "Checking playbook syntax..."
                 sh '''
                 export ANSIBLE_HOST_KEY_CHECKING=False
-                ansible-playbook -i $INVENTORY $PLAYBOOK --syntax-check
-        stage('Deploy Kafka') {
-            steps {
-                echo "Deploying Kafka cluster..."
-                sh '''
-                export ANSIBLE_HOST_KEY_CHECKING=False
-                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags kafka
+                ansible-playbook -i ${INVENTORY} ${PLAYBOOK} --syntax-check
                 '''
             }
         }
-    }
 
         stage('Ansible Dry Run (Check Mode)') {
             steps {
-                echo "Running Ansible dry run (check mode)..."
+                echo "Performing dry run of playbooks..."
                 sh '''
                 export ANSIBLE_HOST_KEY_CHECKING=False
-                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --check
+                ansible-playbook -i ${INVENTORY} ${PLAYBOOK} --check -u ${ANSIBLE_USER} --private-key ${ANSIBLE_KEY}
                 '''
             }
         }
 
-        // ----------------- Deployment Stages -----------------
+        // ===== Deployment Stages =====
         stage('Deploy Zookeeper') {
             steps {
                 echo "Deploying Zookeeper cluster..."
                 sh '''
                 export ANSIBLE_HOST_KEY_CHECKING=False
-                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags zookeeper
+                ansible-playbook -i ${INVENTORY} ${PLAYBOOK} -u ${ANSIBLE_USER} --private-key ${ANSIBLE_KEY} --tags zookeeper
                 '''
             }
         }
@@ -88,7 +69,7 @@ pipeline {
                 echo "Deploying Kafka cluster..."
                 sh '''
                 export ANSIBLE_HOST_KEY_CHECKING=False
-                ansible-playbook -i $INVENTORY $PLAYBOOK -u $ANSIBLE_USER --private-key $ANSIBLE_KEY --tags kafka
+                ansible-playbook -i ${INVENTORY} ${PLAYBOOK} -u ${ANSIBLE_USER} --private-key ${ANSIBLE_KEY} --tags kafka
                 '''
             }
         }
@@ -96,21 +77,10 @@ pipeline {
 
     post {
         success {
-            echo "Ansible CI checks passed and Zookeeper & Kafka clusters deployed successfully!"
+            echo "Ansible CI checks and Kafka/Zookeeper deployment completed successfully!"
         }
         failure {
-            echo "Pipeline failed. Please check the logs."
-        }
-        always {
-            echo "Cleaning workspace..."
-            cleanWs()
-        }
-    post {
-        success {
-            echo "Zookeeper & Kafka clusters deployed successfully!"
-        }
-        failure {
-            echo "Deployment failed. Please check the logs."
+            echo "Pipeline failed. Check logs for details."
         }
         always {
             echo "Cleaning workspace..."
